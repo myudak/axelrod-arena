@@ -147,6 +147,7 @@ export default function StrategiesPage() {
           <div className="detail-actions">
             <PixelLink href={`/play?opponent=${selected.id}`}>FIGHT THIS STRATEGY</PixelLink>
             <PixelLink href={`/battle?a=${selected.id}&b=tit-for-tat`} tone="quiet">OPEN IN BATTLE</PixelLink>
+            <PixelLink href="/research" tone="quiet">READ THE RESEARCH</PixelLink>
           </div>
         </PixelPanel>
       </div>
