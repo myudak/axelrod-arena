@@ -1,12 +1,27 @@
 import { Link, NavLink } from "react-router";
 import { MotionToggle, SoundToggle } from "@/components/settings-controls";
+import { levelInfo, useProgress } from "@/lib/progress";
 
 const nav = [
   { href: "/play", label: "PLAY" },
+  { href: "/campaign", label: "CAMPAIGN" },
   { href: "/battle", label: "BATTLE" },
   { href: "/tournament", label: "TOURNAMENT" },
   { href: "/strategies", label: "STRATEGIES" },
 ];
+
+function LevelChip() {
+  const { xp } = useProgress();
+  const level = levelInfo(xp);
+  return (
+    <Link to="/profile" className="level-chip" aria-label={`Level ${level.level} ${level.title}. Open profile`}>
+      <b>LV{level.level}</b>
+      <span className="level-chip__bar" aria-hidden="true">
+        <i style={{ width: `${level.progress * 100}%` }} />
+      </span>
+    </Link>
+  );
+}
 
 export function SiteHeader() {
   return (
@@ -34,6 +49,7 @@ export function SiteHeader() {
           ))}
         </nav>
         <div className="header-tools">
+          <LevelChip />
           <SoundToggle />
           <MotionToggle />
         </div>
