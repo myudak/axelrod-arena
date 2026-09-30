@@ -1,14 +1,10 @@
 
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import { PageMeta } from "@/components/page-meta";
 import { PixelBadge, PixelButton, PixelPanel, ScreenTitle } from "@/components/retro";
 import { StrategyAvatar } from "@/components/strategy-avatar";
-import {
-  getStrategy,
-  runTournament,
-  strategies,
-  type TournamentResult,
-} from "@/lib/game";
+import { getStrategy, strategies } from "@/lib/game";
+import { useTournamentRunner } from "@/lib/use-tournament";
 
 const defaultOptions = {
   strategyIds: strategies.map((strategy) => strategy.id),
@@ -18,59 +14,45 @@ const defaultOptions = {
 };
 
 export default function TournamentPage() {
-  const [result, setResult] = useState<TournamentResult>(() => runTournament(defaultOptions));
+  const { result, running, run: runWith } = useTournamentRunner(defaultOptions);
   const [seed, setSeed] = useState(defaultOptions.seed);
-  const [status, setStatus] = useState<"ready" | "running">("ready");
-  const [selectedId, setSelectedId] = useState(result.rows[0].strategyId);
-  const workerRef = useRef<Worker | null>(null);
-  const selectedRow = result.rows.find((row) => row.strategyId === selectedId) ?? result.rows[0];
-  const selectedStrategy = getStrategy(selectedRow.strategyId);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
 
-  const totalMatches = result.matches.length;
   const cooperationAverage = useMemo(
-    () => result.rows.reduce((sum, row) => sum + row.cooperationRate, 0) / result.rows.length,
+    () =>
+      result
+        ? result.rows.reduce((sum, row) => sum + row.cooperationRate, 0) / result.rows.length
+        : 0,
     [result],
   );
 
   const run = () => {
-    setStatus("running");
-    const options = { ...defaultOptions, seed: seed || defaultOptions.seed };
-    if (typeof Worker === "undefined") {
-      const next = runTournament(options);
-      setResult(next);
-      setSelectedId(next.rows[0].strategyId);
-      setStatus("ready");
-      return;
-    }
-    workerRef.current?.terminate();
-    const worker = new Worker(new URL("../workers/tournament.worker.ts", import.meta.url), {
-      type: "module",
-    });
-    workerRef.current = worker;
-    worker.onmessage = (event: MessageEvent<TournamentResult>) => {
-      setResult(event.data);
-      setSelectedId(event.data.rows[0].strategyId);
-      setStatus("ready");
-      worker.terminate();
-      workerRef.current = null;
-    };
-    worker.onerror = () => {
-      const next = runTournament(options);
-      setResult(next);
-      setSelectedId(next.rows[0].strategyId);
-      setStatus("ready");
-      worker.terminate();
-      workerRef.current = null;
-    };
-    worker.postMessage(options);
+    setSelectedId(null);
+    runWith({ ...defaultOptions, seed: seed || defaultOptions.seed });
   };
+
+  if (!result) {
+    return (
+      <main className="app-shell">
+        <PageMeta title="Tournament" description="Run a deterministic round-robin Axelrod tournament and explore the leaderboard." />
+        <ScreenTitle title="EVERYONE FIGHTS EVERYONE" description="Simulating the opening tournament…" />
+        <PixelPanel className="tournament-loading" aria-busy="true">
+          <p>SIMULATING {strategies.length} FIGHTERS…</p>
+        </PixelPanel>
+      </main>
+    );
+  }
+
+  const selectedRow = result.rows.find((row) => row.strategyId === selectedId) ?? result.rows[0];
+  const selectedStrategy = getStrategy(selectedRow.strategyId);
+  const fieldSize = result.rows.length;
 
   return (
     <main className="app-shell">
       <PageMeta title="Tournament" description="Run a deterministic round-robin Axelrod tournament and explore the leaderboard." />
       <ScreenTitle
         title="EVERYONE FIGHTS EVERYONE"
-        description="Ten strategies meet in a seeded round-robin. Rankings use average payoff per turn—not raw cooperation—because being nice is only useful when it survives contact with the field."
+        description={`${fieldSize} strategies meet in a seeded round-robin. Rankings use average payoff per turn—not raw cooperation—because being nice is only useful when it survives contact with the field.`}
       />
 
       <PixelPanel className="tournament-console">
@@ -81,18 +63,18 @@ export default function TournamentPage() {
           </div>
           <div>
             <span>LENGTH</span>
-            <strong>200 ROUNDS</strong>
+            <strong>{result.roundsPerMatch} ROUNDS</strong>
           </div>
           <div>
             <span>REPETITIONS</span>
-            <strong>5 PER PAIRING</strong>
+            <strong>{result.repetitions} PER PAIRING</strong>
           </div>
           <label>
             <span>RANDOM SEED</span>
             <input value={seed} onChange={(event) => setSeed(event.target.value.toUpperCase())} />
           </label>
-          <PixelButton onClick={run} disabled={status === "running"}>
-            {status === "running" ? "SIMULATING..." : "RUN TOURNAMENT"}
+          <PixelButton onClick={run} disabled={running}>
+            {running ? "SIMULATING..." : "RUN TOURNAMENT"}
           </PixelButton>
         </div>
         <div className="tournament-roster">
@@ -111,7 +93,7 @@ export default function TournamentPage() {
         </PixelPanel>
         <PixelPanel>
           <span>MATCHES</span>
-          <strong>{totalMatches}</strong>
+          <strong>{result.matchCount}</strong>
         </PixelPanel>
         <PixelPanel>
           <span>FIELD COOPERATION</span>
@@ -132,8 +114,8 @@ export default function TournamentPage() {
             </div>
             <span>SEED {result.seed}</span>
           </div>
-          <div className="leaderboard-table" role="table" aria-label="Tournament leaderboard">
-            <div className="leaderboard-row leaderboard-row--header" role="row">
+          <div className="leaderboard-table" aria-label="Tournament leaderboard">
+            <div className="leaderboard-row leaderboard-row--header" aria-hidden="true">
               <span>RANK</span>
               <span>STRATEGY</span>
               <span>AVG / TURN</span>
@@ -145,9 +127,10 @@ export default function TournamentPage() {
               return (
                 <button
                   key={row.strategyId}
-                  className={`leaderboard-row ${selectedId === row.strategyId ? "is-selected" : ""}`}
+                  className={`leaderboard-row ${selectedRow.strategyId === row.strategyId ? "is-selected" : ""}`}
                   onClick={() => setSelectedId(row.strategyId)}
-                  role="row"
+                  aria-pressed={selectedRow.strategyId === row.strategyId}
+                  aria-label={`Rank ${row.rank}: ${strategy.name}, ${row.averagePayoff.toFixed(3)} points per turn, ${Math.round(row.cooperationRate * 100)}% cooperation, ${row.wins} wins ${row.draws} draws ${row.losses} losses`}
                 >
                   <span className="leaderboard-rank">{row.rank.toString().padStart(2, "0")}</span>
                   <span className="leaderboard-name">
@@ -211,8 +194,9 @@ export default function TournamentPage() {
 
       <p className="method-note">
         <strong>METHOD:</strong> classic 5/3/1/0 payoffs, simultaneous moves, zero noise,
-        five deterministic seeded repetitions per unordered pairing, including self-play.
-        Change the seed to test stochastic strategies again.
+        {" "}{result.repetitions} seeded repetitions of {result.roundsPerMatch} moves per unordered pairing,
+        including self-play. That is the format of Axelrod&apos;s first tournament (1980).
+        Change the seed to re-roll the stochastic strategies.
       </p>
     </main>
   );

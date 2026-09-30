@@ -1,6 +1,7 @@
 import { Link } from "react-router";
 import { MoveChip } from "@/components/move-history";
 import { PageMeta } from "@/components/page-meta";
+import { PixelIcon } from "@/components/pixel-icon";
 import { PixelLink, PixelPanel } from "@/components/retro";
 import { StrategyAvatar } from "@/components/strategy-avatar";
 import { getStrategy, simulateMatch, strategies } from "@/lib/game";
@@ -27,12 +28,12 @@ export default function Home() {
             and see which strategy survives.
           </p>
           <div className="hero__actions">
-            <PixelLink href="/play">▶ PLAY YOURSELF</PixelLink>
+            <PixelLink href="/play"><PixelIcon name="play" size={12} /> PLAY YOURSELF</PixelLink>
             <PixelLink href="/tournament" tone="quiet">RUN TOURNAMENT</PixelLink>
           </div>
           <div className="hero__facts" aria-label="Game facts">
             <div>
-              <strong>10</strong>
+              <strong>{strategies.length}</strong>
               <span>CLASSIC FIGHTERS</span>
             </div>
             <div>
@@ -83,7 +84,7 @@ export default function Home() {
             next.
           </p>
           <Link className="text-link" to="/battle">
-            WATCH THE FULL BATTLE →
+            WATCH THE FULL BATTLE <PixelIcon name="arrowRight" size={10} />
           </Link>
         </PixelPanel>
       </section>
@@ -127,7 +128,7 @@ export default function Home() {
             <h2>MEET THE STRATEGIES</h2>
           </div>
           <Link to="/strategies" className="text-link">
-            VIEW ALL FIGHTERS →
+            VIEW ALL FIGHTERS <PixelIcon name="arrowRight" size={10} />
           </Link>
         </div>
         <div className="home-roster">

@@ -2,8 +2,10 @@
 import { useMemo, useState } from "react";
 import { MoveChip } from "@/components/move-history";
 import { PageMeta } from "@/components/page-meta";
+import { PixelIcon } from "@/components/pixel-icon";
 import { PixelBadge, PixelLink, PixelPanel, ScreenTitle } from "@/components/retro";
 import { StrategyAvatar } from "@/components/strategy-avatar";
+import { cite, paperMap } from "@/data/papers";
 import {
   getStrategy,
   simulateMatch,
@@ -70,7 +72,7 @@ export default function StrategiesPage() {
               <div className="trait-row">
                 {strategy.traits.slice(0, 2).map((trait) => <span key={trait}>{trait}</span>)}
               </div>
-              <i aria-hidden="true">INSPECT →</i>
+              <i aria-hidden="true">INSPECT <PixelIcon name="arrowRight" size={9} /></i>
             </button>
           ))}
         </div>
@@ -101,6 +103,28 @@ export default function StrategiesPage() {
               {selected.traits.map((trait) => <i key={trait}>{trait}</i>)}
             </div>
           </section>
+
+          {selected.sources.length > 0 ? (
+            <section>
+              <span>SOURCES</span>
+              <ul className="source-list">
+                {selected.sources.map((id) => {
+                  const paper = paperMap[id];
+                  return (
+                    <li key={id}>
+                      {paper?.url ? (
+                        <a href={paper.url} target="_blank" rel="noreferrer" title={paper.title}>
+                          {cite(id)}
+                        </a>
+                      ) : (
+                        <span title={paper?.title}>{cite(id)}</span>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            </section>
+          ) : null}
 
           <section>
             <span>12 ROUNDS VS TIT FOR TAT</span>

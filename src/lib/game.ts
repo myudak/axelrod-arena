@@ -1,12 +1,25 @@
 export type Move = "C" | "D";
 
-export type StrategyCategory = "BEGINNER" | "CLASSIC" | "ADVANCED";
+export type StrategyCategory = "BEGINNER" | "CLASSIC" | "ADVANCED" | "CUSTOM";
 
 export interface StrategyContext {
   selfHistory: Move[];
   opponentHistory: Move[];
   round: number;
   rng: () => number;
+}
+
+/**
+ * A memory-one strategy: the probability of cooperating given the previous
+ * round's outcome, written from this player's point of view (self, opponent).
+ */
+export interface MemoryOneSpec {
+  /** Probability of cooperating on the first move. */
+  p0: number;
+  pCC: number;
+  pCD: number;
+  pDC: number;
+  pDD: number;
 }
 
 export interface Strategy {
@@ -20,7 +33,19 @@ export interface Strategy {
   description: string;
   rule: string;
   traits: string[];
+  /** Paper ids from `src/data/papers.ts`. */
+  sources: string[];
+  memoryOne?: MemoryOneSpec;
   choose: (context: StrategyContext) => Move;
+}
+
+/** Serializable definition of a player-built strategy (safe to store and post to workers). */
+export interface CustomStrategyDef {
+  id: string;
+  name: string;
+  symbol: string;
+  color: string;
+  spec: MemoryOneSpec;
 }
 
 export interface RoundResult {
@@ -29,6 +54,9 @@ export interface RoundResult {
   moveB: Move;
   payoffA: number;
   payoffB: number;
+  /** True when noise flipped the intended move. */
+  flippedA?: boolean;
+  flippedB?: boolean;
 }
 
 export interface MatchResult {
@@ -43,6 +71,13 @@ export interface MatchResult {
   cooperationB: number;
 }
 
+export interface VersusRecord {
+  payoff: number;
+  opponentPayoff: number;
+  cooperationRate: number;
+  rounds: number;
+}
+
 export interface TournamentRow {
   strategyId: string;
   rank: number;
@@ -54,24 +89,36 @@ export interface TournamentRow {
   draws: number;
   losses: number;
   matches: number;
-  versus: Record<
-    string,
-    {
-      payoff: number;
-      opponentPayoff: number;
-      cooperationRate: number;
-      rounds: number;
-    }
-  >;
+  versus: Record<string, VersusRecord>;
+}
+
+export interface TournamentOptions {
+  strategyIds?: string[];
+  customs?: CustomStrategyDef[];
+  /** Fixed match length. Ignored when `continuation` is set. */
+  rounds?: number;
+  repetitions?: number;
+  seed?: string;
+  /** Probability that each intended move is flipped by mistake. */
+  noise?: number;
+  /** Probability w that the match continues after each round (random match length). */
+  continuation?: number;
+  /** Keep every round of every match in the result (large). */
+  includeMatches?: boolean;
 }
 
 export interface TournamentResult {
   seed: string;
   roundsPerMatch: number;
   repetitions: number;
+  noise: number;
+  continuation?: number;
   rows: TournamentRow[];
-  matches: MatchResult[];
+  matchCount: number;
+  matches?: MatchResult[];
   totalRounds: number;
+  /** Lengths drawn per repetition when `continuation` is set. */
+  matchLengths: number[];
 }
 
 export const DEFAULT_PAYOFFS = {
@@ -80,6 +127,10 @@ export const DEFAULT_PAYOFFS = {
   punishment: 1,
   sucker: 0,
 } as const;
+
+/** Continuation probability used in Axelrod's second tournament. */
+export const AXELROD_SECOND_W = 0.99654;
+export const MAX_MATCH_ROUNDS = 2000;
 
 export function hashSeed(value: string) {
   let hash = 2166136261;
@@ -122,6 +173,84 @@ function last<T>(values: T[]) {
   return values[values.length - 1];
 }
 
+/** Draws a match length from a geometric distribution with continuation probability `w`. */
+export function drawMatchLength(w: number, rng: () => number, max = MAX_MATCH_ROUNDS) {
+  let length = 1;
+  while (length < max && rng() < w) length += 1;
+  return length;
+}
+
+export function memoryOne(spec: MemoryOneSpec) {
+  return ({ selfHistory, opponentHistory, rng }: StrategyContext): Move => {
+    const probability =
+      selfHistory.length === 0
+        ? spec.p0
+        : last(selfHistory) === "C"
+          ? last(opponentHistory) === "C"
+            ? spec.pCC
+            : spec.pCD
+          : last(opponentHistory) === "C"
+            ? spec.pDC
+            : spec.pDD;
+    if (probability >= 1) return "C";
+    if (probability <= 0) return "D";
+    return rng() < probability ? "C" : "D";
+  };
+}
+
+/** Generous Tit for Tat forgiveness for the active payoffs (Nowak & Sigmund 1992). */
+export const GTFT_FORGIVENESS = (() => {
+  const { temptation: T, reward: R, punishment: P, sucker: S } = DEFAULT_PAYOFFS;
+  return Math.min(1 - (T - R) / (R - S), (R - P) / (T - P));
+})();
+
+/** Gradual: punish the n-th defection with n defections, then two calming cooperations. */
+function gradualMove(opponentHistory: Move[]): Move {
+  let defections = 0;
+  let punish = 0;
+  let calm = 0;
+  let move: Move = "C";
+  for (let round = 0; round <= opponentHistory.length; round += 1) {
+    const previous = round > 0 ? opponentHistory[round - 1] : undefined;
+    if (previous === "D") defections += 1;
+    if (punish > 0) {
+      move = "D";
+      punish -= 1;
+      if (punish === 0) calm = 2;
+    } else if (calm > 0) {
+      move = "C";
+      calm -= 1;
+    } else if (previous === "D") {
+      move = "D";
+      punish = defections - 1;
+      if (punish === 0) calm = 2;
+    } else {
+      move = "C";
+    }
+  }
+  return move;
+}
+
+const TFT_SPEC: MemoryOneSpec = { p0: 1, pCC: 1, pCD: 0, pDC: 1, pDD: 0 };
+const GTFT_SPEC: MemoryOneSpec = {
+  p0: 1,
+  pCC: 1,
+  pCD: GTFT_FORGIVENESS,
+  pDC: 1,
+  pDD: GTFT_FORGIVENESS,
+};
+const PAVLOV_SPEC: MemoryOneSpec = { p0: 1, pCC: 1, pCD: 0, pDC: 0, pDD: 1 };
+const EXTORT2_SPEC: MemoryOneSpec = { p0: 1, pCC: 8 / 9, pCD: 1 / 2, pDC: 1 / 3, pDD: 0 };
+
+export const memoryOnePresets: { id: string; label: string; spec: MemoryOneSpec }[] = [
+  { id: "tit-for-tat", label: "Tit for Tat", spec: TFT_SPEC },
+  { id: "generous-tit-for-tat", label: "Generous TFT", spec: GTFT_SPEC },
+  { id: "pavlov", label: "Win-Stay Lose-Shift", spec: PAVLOV_SPEC },
+  { id: "extort-2", label: "Extort-2", spec: EXTORT2_SPEC },
+  { id: "always-cooperate", label: "Always C", spec: { p0: 1, pCC: 1, pCD: 1, pDC: 1, pDD: 1 } },
+  { id: "always-defect", label: "Always D", spec: { p0: 0, pCC: 0, pCD: 0, pDC: 0, pDD: 0 } },
+];
+
 export const strategies: Strategy[] = [
   {
     id: "always-cooperate",
@@ -135,6 +264,8 @@ export const strategies: Strategy[] = [
       "Offers cooperation every round, even after repeated betrayal. Creates maximum welfare with another cooperator and becomes an easy target for defectors.",
     rule: "Always choose C.",
     traits: ["Nice", "Forgiving", "Exploitable"],
+    sources: ["axelrod1984"],
+    memoryOne: { p0: 1, pCC: 1, pCD: 1, pDC: 1, pDD: 1 },
     choose: () => "C",
   },
   {
@@ -149,6 +280,8 @@ export const strategies: Strategy[] = [
       "Defects every round. It harvests naive cooperators but cannot build the repeated mutual gains that reciprocal strategies can.",
     rule: "Always choose D.",
     traits: ["Aggressive", "Clear", "Unforgiving"],
+    sources: ["axelrod1984"],
+    memoryOne: { p0: 0, pCC: 0, pCD: 0, pDC: 0, pDD: 0 },
     choose: () => "D",
   },
   {
@@ -160,9 +293,11 @@ export const strategies: Strategy[] = [
     color: "violet",
     tagline: "A coin with commitment issues.",
     description:
-      "Cooperates or defects with equal probability. It has no memory, intention, or stable relationship with its opponent.",
+      "Cooperates or defects with equal probability. Axelrod entered it in both tournaments as a baseline with no memory or intention.",
     rule: "Choose C or D with equal probability.",
     traits: ["Unpredictable", "Memoryless", "Neutral"],
+    sources: ["axelrod1980a"],
+    memoryOne: { p0: 0.5, pCC: 0.5, pCD: 0.5, pDC: 0.5, pDD: 0.5 },
     choose: ({ rng }) => (rng() < 0.5 ? "C" : "D"),
   },
   {
@@ -174,11 +309,33 @@ export const strategies: Strategy[] = [
     color: "cyan",
     tagline: "Nice. Retaliatory. Forgiving. Clear.",
     description:
-      "Begins with cooperation, then mirrors the opponent's previous move. A single friendly action restores cooperation after a punishment.",
+      "Anatol Rapoport's entry and the winner of both Axelrod tournaments. Begins with cooperation, then mirrors the opponent's previous move. It never outscores an opponent head-to-head, yet it tops the table.",
     rule: "Start with C, then copy the opponent's previous move.",
     traits: ["Nice", "Retaliatory", "Forgiving"],
+    sources: ["axelrod1980a", "axelrod1980b"],
+    memoryOne: TFT_SPEC,
     choose: ({ opponentHistory }) =>
       opponentHistory.length === 0 ? "C" : last(opponentHistory),
+  },
+  {
+    id: "tit-for-two-tats",
+    name: "Tit for Two Tats",
+    shortName: "TF2T",
+    category: "CLASSIC",
+    symbol: "T2T",
+    color: "teal",
+    tagline: "Slow to anger.",
+    description:
+      "Only retaliates after two defections in a row. Axelrod noted it would have won the first tournament had anyone entered it, but in the second tournament entrants learned to exploit its patience.",
+    rule: "Defect only if the opponent defected in both of the last two rounds.",
+    traits: ["Nice", "Patient", "Exploitable"],
+    sources: ["axelrod1980a", "axelrod1980b"],
+    choose: ({ opponentHistory }) =>
+      opponentHistory.length >= 2 &&
+      opponentHistory[opponentHistory.length - 1] === "D" &&
+      opponentHistory[opponentHistory.length - 2] === "D"
+        ? "D"
+        : "C",
   },
   {
     id: "suspicious-tit-for-tat",
@@ -189,9 +346,11 @@ export const strategies: Strategy[] = [
     color: "amber",
     tagline: "Reciprocity without first trust.",
     description:
-      "Uses the Tit for Tat rule but defects on the opening round. That initial suspicion can trap another reciprocal player in conflict.",
+      "Uses the Tit for Tat rule but defects on the opening round. That initial suspicion can trap another reciprocal player in an endless echo of retaliation.",
     rule: "Start with D, then copy the opponent's previous move.",
     traits: ["Suspicious", "Retaliatory", "Forgiving"],
+    sources: ["boyd-lorberbaum1987"],
+    memoryOne: { p0: 0, pCC: 1, pCD: 0, pDC: 1, pDD: 0 },
     choose: ({ opponentHistory }) =>
       opponentHistory.length === 0 ? "D" : last(opponentHistory),
   },
@@ -204,9 +363,10 @@ export const strategies: Strategy[] = [
     color: "slate",
     tagline: "One betrayal. Permanent consequences.",
     description:
-      "Cooperates until the opponent defects once. From that moment onward it defects forever, making its deterrent powerful and its mistakes costly.",
+      "Cooperates until the opponent defects once, then defects forever. Entered in Axelrod's first tournament as FRIEDMAN. Its deterrent is powerful and its mistakes are costly.",
     rule: "Choose C until the opponent defects once; then always choose D.",
     traits: ["Nice", "Harsh", "Unforgiving"],
+    sources: ["friedman1971", "axelrod1980a"],
     choose: ({ opponentHistory }) =>
       opponentHistory.includes("D") ? "D" : "C",
   },
@@ -219,13 +379,12 @@ export const strategies: Strategy[] = [
     color: "green",
     tagline: "Reciprocity with a little grace.",
     description:
-      "Copies cooperation, but occasionally forgives a defection. The small chance of grace helps escape retaliation loops caused by accidents.",
-    rule: "Copy C; after D, forgive with a 20% chance.",
+      "Copies cooperation, but forgives a defection one time in three. That is the optimal generosity for 5/3/1/0 payoffs, and it lets the strategy escape retaliation loops caused by mistakes.",
+    rule: "Start with C. Copy C; after D, still cooperate with probability 1/3.",
     traits: ["Nice", "Retaliatory", "Generous"],
-    choose: ({ opponentHistory, rng }) => {
-      if (opponentHistory.length === 0) return "C";
-      return last(opponentHistory) === "D" && rng() >= 0.2 ? "D" : "C";
-    },
+    sources: ["nowak-sigmund1992", "wu-axelrod1995"],
+    memoryOne: GTFT_SPEC,
+    choose: memoryOne(GTFT_SPEC),
   },
   {
     id: "pavlov",
@@ -236,15 +395,27 @@ export const strategies: Strategy[] = [
     color: "blue",
     tagline: "Win-stay, lose-shift.",
     description:
-      "Repeats its previous move after a rewarding result and switches after a poor result. It can repair mutual defection without unconditional forgiveness.",
-    rule: "Start with C. Repeat after scores 3 or 5; otherwise switch.",
+      "Repeats its previous move after a good result (3 or 5) and switches after a bad one (0 or 1). It repairs accidental defection between two Pavlovs and exploits unconditional cooperators.",
+    rule: "Start with C. Repeat after scoring 3 or 5; otherwise switch.",
     traits: ["Adaptive", "Recovering", "Exploitative"],
-    choose: ({ selfHistory, opponentHistory }) => {
-      if (selfHistory.length === 0) return "C";
-      const ownLast = last(selfHistory);
-      const [payoff] = scoreRound(ownLast, last(opponentHistory));
-      return payoff === 3 || payoff === 5 ? ownLast : opposite(ownLast);
-    },
+    sources: ["nowak-sigmund1993"],
+    memoryOne: PAVLOV_SPEC,
+    choose: memoryOne(PAVLOV_SPEC),
+  },
+  {
+    id: "gradual",
+    name: "Gradual",
+    shortName: "GRADUAL",
+    category: "ADVANCED",
+    symbol: "GR",
+    color: "indigo",
+    tagline: "Punishment that escalates.",
+    description:
+      "Cooperates until betrayed. After the opponent's n-th defection it defects n times in a row, then cooperates twice to calm things down. Repeat offenders face longer punishments.",
+    rule: "Answer the n-th defection with n defections, then two cooperations.",
+    traits: ["Nice", "Escalating", "Forgiving"],
+    sources: ["beaufils1996"],
+    choose: ({ opponentHistory }) => gradualMove(opponentHistory),
   },
   {
     id: "joss",
@@ -255,9 +426,11 @@ export const strategies: Strategy[] = [
     color: "pink",
     tagline: "Tit for Tat with a mean streak.",
     description:
-      "Usually mirrors the opponent, but occasionally defects after cooperation. These surprise betrayals test how well opponents recover.",
+      "Johann Joss's entry in Axelrod's first tournament. Usually mirrors the opponent, but sneaks in a defection 10% of the time after cooperation, which sets off long retaliation chains.",
     rule: "Play Tit for Tat, with a 10% chance to defect after cooperation.",
     traits: ["Retaliatory", "Provocative", "Stochastic"],
+    sources: ["axelrod1980a"],
+    memoryOne: { p0: 1, pCC: 0.9, pCD: 0, pDC: 0.9, pDD: 0 },
     choose: ({ opponentHistory, rng }) => {
       if (opponentHistory.length === 0) return "C";
       return last(opponentHistory) === "D" || rng() < 0.1 ? "D" : "C";
@@ -272,9 +445,10 @@ export const strategies: Strategy[] = [
     color: "orange",
     tagline: "Probe first. Exploit weakness later.",
     description:
-      "Tests the opponent with C, D, C, C. If the opponent retaliates it becomes Tit for Tat; if not, it exploits them by defecting forever.",
+      "From Nicky Case's The Evolution of Trust. Opens C, D, C, C. If the opponent ever retaliates it becomes Tit for Tat; if not, it exploits them by defecting forever.",
     rule: "Probe C-D-C-C; then use Tit for Tat if punished, otherwise defect.",
     traits: ["Probing", "Adaptive", "Exploitative"],
+    sources: ["case2017"],
     choose: ({ opponentHistory, round }) => {
       const probe: Move[] = ["C", "D", "C", "C"];
       if (round < probe.length) return probe[round];
@@ -282,58 +456,118 @@ export const strategies: Strategy[] = [
       return opponentRetaliated ? last(opponentHistory) : "D";
     },
   },
+  {
+    id: "extort-2",
+    name: "Extort-2",
+    shortName: "EXTORT-2",
+    category: "ADVANCED",
+    symbol: "EX2",
+    color: "crimson",
+    tagline: "Your gain is my gain, times two.",
+    description:
+      "A zero-determinant strategy. Its memory-one rule forces its surplus over mutual defection to be exactly twice yours. It never loses a head-to-head match, yet it earns little against players who refuse to be extorted.",
+    rule: "Cooperate with probability 8/9, 1/2, 1/3, 0 after CC, CD, DC, DD.",
+    traits: ["Extortionate", "Stochastic", "Unbeatable head-to-head"],
+    sources: ["press-dyson2012", "stewart-plotkin2012", "stewart-plotkin2013"],
+    memoryOne: EXTORT2_SPEC,
+    choose: memoryOne(EXTORT2_SPEC),
+  },
 ];
+
+export function customStrategy(def: CustomStrategyDef): Strategy {
+  const percent = (value: number) => `${Math.round(value * 100)}%`;
+  return {
+    id: def.id,
+    name: def.name,
+    shortName: def.name.toUpperCase().slice(0, 16),
+    category: "CUSTOM",
+    symbol: def.symbol.toUpperCase().slice(0, 3),
+    color: def.color,
+    tagline: "Built in your lab.",
+    description: "A memory-one strategy designed by you.",
+    rule: `First move C ${percent(def.spec.p0)}. Then P(C) after CC ${percent(def.spec.pCC)}, CD ${percent(def.spec.pCD)}, DC ${percent(def.spec.pDC)}, DD ${percent(def.spec.pDD)}.`,
+    traits: ["Custom", "Memory-one"],
+    sources: [],
+    memoryOne: def.spec,
+    choose: memoryOne(def.spec),
+  };
+}
+
+export function buildRoster(customs: CustomStrategyDef[] = []): Strategy[] {
+  return [...strategies, ...customs.map(customStrategy)];
+}
 
 export const strategyMap = Object.fromEntries(
   strategies.map((strategy) => [strategy.id, strategy]),
 ) as Record<string, Strategy>;
 
-export function getStrategy(id: string) {
-  return strategyMap[id] ?? strategyMap["tit-for-tat"];
+export function getStrategy(id: string, roster: Strategy[] = strategies) {
+  return roster.find((strategy) => strategy.id === id) ?? strategyMap[id] ?? strategyMap["tit-for-tat"];
+}
+
+export function isStrategyId(id: string | null | undefined, roster: Strategy[] = strategies): id is string {
+  return Boolean(id) && roster.some((strategy) => strategy.id === id);
+}
+
+export interface MatchOptions {
+  /** Fixed match length (default 200). Ignored when `continuation` is set. */
+  rounds?: number;
+  seed?: string;
+  noise?: number;
+  continuation?: number;
 }
 
 export function simulateMatch(
   strategyA: Strategy,
   strategyB: Strategy,
-  options: { rounds?: number; seed?: string; noise?: number } = {},
+  options: MatchOptions = {},
 ): MatchResult {
-  const totalRounds = options.rounds ?? 200;
   const seed = options.seed ?? "AXELROD-1984";
   const noise = options.noise ?? 0;
+  const totalRounds =
+    options.continuation !== undefined
+      ? drawMatchLength(options.continuation, createRng(`${seed}:length`))
+      : (options.rounds ?? 200);
   const rngA = createRng(`${seed}:${strategyA.id}:A`);
   const rngB = createRng(`${seed}:${strategyB.id}:B`);
   const noiseRng = createRng(`${seed}:noise`);
   const historyA: Move[] = [];
   const historyB: Move[] = [];
   const roundResults: RoundResult[] = [];
+  let scoreA = 0;
+  let scoreB = 0;
+  let cooperationsA = 0;
+  let cooperationsB = 0;
 
   for (let round = 0; round < totalRounds; round += 1) {
     const intendedA = strategyA.choose({
-      selfHistory: [...historyA],
-      opponentHistory: [...historyB],
+      selfHistory: historyA,
+      opponentHistory: historyB,
       round,
       rng: rngA,
     });
     const intendedB = strategyB.choose({
-      selfHistory: [...historyB],
-      opponentHistory: [...historyA],
+      selfHistory: historyB,
+      opponentHistory: historyA,
       round,
       rng: rngB,
     });
-    const moveA = noiseRng() < noise ? opposite(intendedA) : intendedA;
-    const moveB = noiseRng() < noise ? opposite(intendedB) : intendedB;
+    const flippedA = noise > 0 && noiseRng() < noise;
+    const flippedB = noise > 0 && noiseRng() < noise;
+    const moveA = flippedA ? opposite(intendedA) : intendedA;
+    const moveB = flippedB ? opposite(intendedB) : intendedB;
     const [payoffA, payoffB] = scoreRound(moveA, moveB);
     historyA.push(moveA);
     historyB.push(moveB);
-    roundResults.push({ round: round + 1, moveA, moveB, payoffA, payoffB });
+    scoreA += payoffA;
+    scoreB += payoffB;
+    if (moveA === "C") cooperationsA += 1;
+    if (moveB === "C") cooperationsB += 1;
+    const result: RoundResult = { round: round + 1, moveA, moveB, payoffA, payoffB };
+    if (flippedA) result.flippedA = true;
+    if (flippedB) result.flippedB = true;
+    roundResults.push(result);
   }
-
-  const scoreA = roundResults.reduce((sum, round) => sum + round.payoffA, 0);
-  const scoreB = roundResults.reduce((sum, round) => sum + round.payoffB, 0);
-  const cooperationA =
-    roundResults.filter((round) => round.moveA === "C").length / totalRounds;
-  const cooperationB =
-    roundResults.filter((round) => round.moveB === "C").length / totalRounds;
 
   return {
     id: `${strategyA.id}--${strategyB.id}--${seed}`,
@@ -343,8 +577,8 @@ export function simulateMatch(
     rounds: roundResults,
     scoreA,
     scoreB,
-    cooperationA,
-    cooperationB,
+    cooperationA: cooperationsA / totalRounds,
+    cooperationB: cooperationsB / totalRounds,
   };
 }
 
@@ -390,23 +624,28 @@ function updateVersus(
   };
 }
 
-export function runTournament(options: {
-  strategyIds?: string[];
-  rounds?: number;
-  repetitions?: number;
-  seed?: string;
-  noise?: number;
-} = {}): TournamentResult {
+export function runTournament(options: TournamentOptions = {}): TournamentResult {
+  const roster = buildRoster(options.customs);
   const selected = (options.strategyIds ?? strategies.map((strategy) => strategy.id))
-    .map(getStrategy)
-    .filter(Boolean);
+    .filter((id) => isStrategyId(id, roster))
+    .map((id) => getStrategy(id, roster));
   const roundsPerMatch = options.rounds ?? 200;
   const repetitions = options.repetitions ?? 5;
   const seed = options.seed ?? "AXELROD-1984";
+  const noise = options.noise ?? 0;
+  const lengthRng = createRng(`${seed}:lengths`);
+  // As in Axelrod's second tournament, every pairing shares the same drawn length per repetition.
+  const matchLengths = Array.from({ length: repetitions }, () =>
+    options.continuation !== undefined
+      ? drawMatchLength(options.continuation, lengthRng)
+      : roundsPerMatch,
+  );
   const rows = Object.fromEntries(
     selected.map((strategy) => [strategy.id, createTournamentRow(strategy.id)]),
   ) as Record<string, MutableTournamentRow>;
   const matches: MatchResult[] = [];
+  let matchCount = 0;
+  let totalRounds = 0;
 
   for (let first = 0; first < selected.length; first += 1) {
     for (let second = first; second < selected.length; second += 1) {
@@ -414,42 +653,31 @@ export function runTournament(options: {
       const strategyB = selected[second];
       for (let repetition = 0; repetition < repetitions; repetition += 1) {
         const match = simulateMatch(strategyA, strategyB, {
-          rounds: roundsPerMatch,
+          rounds: matchLengths[repetition],
           seed: `${seed}:${first}:${second}:${repetition}`,
-          noise: options.noise,
+          noise,
         });
-        matches.push(match);
+        const length = match.rounds.length;
+        matchCount += 1;
+        totalRounds += length;
+        if (options.includeMatches) matches.push(match);
 
         const rowA = rows[strategyA.id];
         const rowB = rows[strategyB.id];
-        const cooperationsA = match.rounds.filter((round) => round.moveA === "C").length;
-        const cooperationsB = match.rounds.filter((round) => round.moveB === "C").length;
+        const cooperationsA = Math.round(match.cooperationA * length);
+        const cooperationsB = Math.round(match.cooperationB * length);
 
         rowA.totalPayoff += match.scoreA;
-        rowA.totalRounds += roundsPerMatch;
+        rowA.totalRounds += length;
         rowA.cooperationCount += cooperationsA;
         rowA.matches += 1;
-        updateVersus(
-          rowA,
-          strategyB.id,
-          match.scoreA,
-          match.scoreB,
-          cooperationsA,
-          roundsPerMatch,
-        );
+        updateVersus(rowA, strategyB.id, match.scoreA, match.scoreB, cooperationsA, length);
 
         rowB.totalPayoff += match.scoreB;
-        rowB.totalRounds += roundsPerMatch;
+        rowB.totalRounds += length;
         rowB.cooperationCount += cooperationsB;
         rowB.matches += 1;
-        updateVersus(
-          rowB,
-          strategyA.id,
-          match.scoreB,
-          match.scoreA,
-          cooperationsB,
-          roundsPerMatch,
-        );
+        updateVersus(rowB, strategyA.id, match.scoreB, match.scoreA, cooperationsB, length);
 
         if (strategyA.id !== strategyB.id) {
           if (match.scoreA > match.scoreB) {
@@ -470,9 +698,8 @@ export function runTournament(options: {
   const rankedRows = Object.values(rows)
     .map((row) => ({
       ...row,
-      rank: 0,
-      averagePayoff: row.totalPayoff / row.totalRounds,
-      cooperationRate: row.cooperationCount / row.totalRounds,
+      averagePayoff: row.totalRounds ? row.totalPayoff / row.totalRounds : 0,
+      cooperationRate: row.totalRounds ? row.cooperationCount / row.totalRounds : 0,
     }))
     .sort((left, right) =>
       right.averagePayoff === left.averagePayoff
@@ -497,10 +724,31 @@ export function runTournament(options: {
     seed,
     roundsPerMatch,
     repetitions,
+    noise,
+    continuation: options.continuation,
     rows: rankedRows,
-    matches,
-    totalRounds: matches.length * roundsPerMatch,
+    matchCount,
+    matches: options.includeMatches ? matches : undefined,
+    totalRounds,
+    matchLengths,
   };
+}
+
+/**
+ * Average per-turn payoff of each row strategy against each column strategy.
+ * `matrix[a][b]` is what `a` earns per turn when facing `b`.
+ */
+export function payoffMatrix(result: TournamentResult) {
+  const ids = result.rows.map((row) => row.strategyId);
+  const matrix: Record<string, Record<string, number>> = {};
+  for (const row of result.rows) {
+    matrix[row.strategyId] = {};
+    for (const id of ids) {
+      const record = row.versus[id];
+      matrix[row.strategyId][id] = record && record.rounds ? record.payoff / record.rounds : 0;
+    }
+  }
+  return { ids, matrix };
 }
 
 export function summarizeRounds(rounds: RoundResult[], cursor = rounds.length) {
@@ -517,4 +765,11 @@ export function summarizeRounds(rounds: RoundResult[], cursor = rounds.length) {
         ? 0
         : visible.filter((round) => round.moveB === "C").length / visible.length,
   };
+}
+
+/** Describes one exchange from player A's perspective. */
+export function outcomeLabel(moveA: Move, moveB: Move) {
+  if (moveA === "C" && moveB === "C") return "MUTUAL TRUST";
+  if (moveA === "D" && moveB === "D") return "MUTUAL DISTRUST";
+  return moveA === "D" ? "EXPLOIT" : "SUCKER";
 }

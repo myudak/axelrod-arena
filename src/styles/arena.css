@@ -815,7 +815,7 @@ input:focus-visible {
 
 .tournament-settings strong { font-family: var(--font-pixel); font-size: 7px; line-height: 1.55; }
 
-.tournament-roster { display: grid; grid-template-columns: repeat(10, 1fr); border-top: 3px solid var(--border); }
+.tournament-roster { display: grid; grid-template-columns: repeat(auto-fit, minmax(64px, 1fr)); border-top: 3px solid var(--border); }
 .tournament-roster span { display: grid; min-height: 38px; place-items: center; border-right: 2px solid var(--border); color: var(--muted-foreground); font-family: var(--font-pixel); font-size: 6px; }
 .tournament-roster span:last-child { border-right: 0; }
 
@@ -960,7 +960,8 @@ input:focus-visible {
   .hero__copy h1 { max-width: 820px; }
   .hero-battle { min-height: 480px; }
   .play-layout { grid-template-columns: minmax(0, 1fr); }
-  .opponent-list { display: grid; grid-template-columns: repeat(5, minmax(170px, 1fr)); overflow-x: auto; overflow-y: hidden; max-height: none; }
+  .opponent-list { display: grid; grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: minmax(190px, 1fr); overflow-x: auto; overflow-y: hidden; max-height: none; scroll-snap-type: x mandatory; }
+  .opponent-list button { scroll-snap-align: start; }
   .opponent-list button { border-right: 2px solid var(--border); border-bottom: 0; }
   .tournament-settings { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .tournament-settings label { grid-column: span 2; }
@@ -1031,7 +1032,6 @@ input:focus-visible {
   .screen-title { padding-block: 40px 28px; }
   .screen-title h1 { font-size: clamp(22px, 8vw, 34px); }
   .play-layout { padding-bottom: 58px; }
-  .opponent-list { grid-template-columns: repeat(10, minmax(180px, 1fr)); }
   .play-fighters { grid-template-columns: minmax(0, 1fr) 44px minmax(0, 1fr); min-height: 230px; padding: 22px 12px; gap: 8px; }
   .play-fighter h2 { font-size: 8px; }
   .play-fighter strong { font-size: 20px; }
@@ -1053,8 +1053,7 @@ input:focus-visible {
   .tournament-settings { grid-template-columns: 1fr 1fr; }
   .tournament-settings > div:nth-child(3) { display: none; }
   .tournament-settings label, .tournament-settings .arena-button { grid-column: 1 / -1; }
-  .tournament-roster { grid-template-columns: repeat(5, 1fr); }
-  .tournament-roster span:nth-child(-n + 5) { border-bottom: 2px solid var(--border); }
+  .tournament-roster { grid-template-columns: repeat(auto-fill, minmax(56px, 1fr)); }
   .tournament-stats { grid-template-columns: 1fr 1fr; }
   .leaderboard-heading { align-items: flex-start; flex-direction: column; }
   .competitor-profile { display: grid; grid-template-columns: 1fr; justify-items: center; text-align: center; }
@@ -1093,3 +1092,11 @@ input:focus-visible {
     transition-duration: 0.01ms !important;
   }
 }
+
+.pixel-icon { display: inline-block; flex: 0 0 auto; vertical-align: -0.12em; }
+.text-link { display: inline-flex; align-items: center; gap: 8px; }
+.arena-link-button .pixel-icon, .arena-button .pixel-icon { margin-right: 4px; }
+.tournament-loading { display: grid; place-items: center; min-height: 320px; font-family: var(--font-pixel); font-size: 10px; }
+.tournament-loading p { animation: blink 1s steps(2) infinite; }
+.source-list { display: flex; flex-wrap: wrap; gap: 6px 12px; margin: 0; padding: 0; list-style: none; font-size: 13px; }
+.source-list a { color: var(--info); text-decoration: underline; text-underline-offset: 3px; }

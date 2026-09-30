@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router";
 import { MoveChip } from "@/components/move-history";
 import { PageMeta } from "@/components/page-meta";
+import { PixelIcon } from "@/components/pixel-icon";
 import { PixelBadge, PixelButton, PixelPanel, ScreenTitle } from "@/components/retro";
 import { HumanAvatar, StrategyAvatar } from "@/components/strategy-avatar";
 import {
@@ -34,6 +35,14 @@ export default function PlayPage() {
   const [flash, setFlash] = useState(0);
   const randomizers = useRef(makeRandomizers(opponentId));
   const opponent = getStrategy(opponentId);
+  // Start a fresh match whenever the opponent changes, including via the URL (back/forward, header link).
+  const [matchOpponentId, setMatchOpponentId] = useState(opponentId);
+  if (matchOpponentId !== opponentId) {
+    setMatchOpponentId(opponentId);
+    setRounds([]);
+    setFinished(false);
+    setFlash(0);
+  }
 
   const reset = useCallback((nextOpponentId = opponentId) => {
     setRounds([]);
@@ -43,8 +52,12 @@ export default function PlayPage() {
   }, [opponentId]);
 
   const chooseOpponent = (id: string) => {
+    if (id === opponentId) {
+      reset(id);
+      return;
+    }
+    randomizers.current = makeRandomizers(id);
     setSearchParams({ opponent: id }, { replace: true });
-    reset(id);
   };
 
   const playMove = useCallback((humanMove: Move) => {
@@ -76,7 +89,9 @@ export default function PlayPage() {
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.repeat || finished) return;
+      if (event.repeat || finished || event.metaKey || event.ctrlKey || event.altKey) return;
+      const target = event.target as HTMLElement | null;
+      if (target?.closest("input, textarea, select, [contenteditable='true']")) return;
       if (event.key.toLowerCase() === "c") playMove("C");
       if (event.key.toLowerCase() === "d") playMove("D");
     };
@@ -126,7 +141,7 @@ export default function PlayPage() {
                   <strong>{strategy.shortName}</strong>
                   <small>{strategy.tagline}</small>
                 </span>
-                <i aria-hidden="true">{strategy.id === opponentId ? "▶" : ""}</i>
+                <i aria-hidden="true">{strategy.id === opponentId ? <PixelIcon name="play" size={12} /> : null}</i>
               </button>
             ))}
           </div>

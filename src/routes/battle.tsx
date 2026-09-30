@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router";
 import { MoveChip } from "@/components/move-history";
 import { PageMeta } from "@/components/page-meta";
+import { PixelIcon } from "@/components/pixel-icon";
 import { PixelBadge, PixelButton, PixelPanel, ScreenTitle } from "@/components/retro";
 import { StrategyAvatar } from "@/components/strategy-avatar";
 import { getStrategy, simulateMatch, strategies, summarizeRounds } from "@/lib/game";
@@ -88,7 +89,7 @@ export default function BattlePage() {
           }}
           aria-label="Swap players"
         >
-          ⇄
+          <PixelIcon name="swap" size={16} />
         </button>
         <label>
           <span>PLAYER B</span>
@@ -110,7 +111,7 @@ export default function BattlePage() {
           <span>SEED</span>
           <input value={seed} onChange={(event) => { setSeed(event.target.value.toUpperCase()); resetPlayback(); }} />
         </label>
-        <button className="dice-button" onClick={randomizeSeed} aria-label="New random seed">✦</button>
+        <button className="dice-button" onClick={randomizeSeed} aria-label="New random seed"><PixelIcon name="dice" size={16} /></button>
       </PixelPanel>
 
       <PixelPanel className="battle-replay">
@@ -185,8 +186,8 @@ export default function BattlePage() {
         </div>
 
         <div className="transport-controls">
-          <button onClick={() => { setPlaying(false); setCursor(0); }} aria-label="Restart">↤</button>
-          <button onClick={() => { setPlaying(false); setCursor((value) => Math.max(0, value - 1)); }} aria-label="Previous round">◀</button>
+          <button onClick={() => { setPlaying(false); setCursor(0); }} aria-label="Restart"><PixelIcon name="first" size={16} /></button>
+          <button onClick={() => { setPlaying(false); setCursor((value) => Math.max(0, value - 1)); }} aria-label="Previous round"><PixelIcon name="prev" size={16} /></button>
           <PixelButton
             onClick={() => {
               if (cursor >= match.rounds.length) setCursor(0);
@@ -195,8 +196,8 @@ export default function BattlePage() {
           >
             {playing ? "PAUSE" : "PLAY"}
           </PixelButton>
-          <button onClick={() => { setPlaying(false); setCursor((value) => Math.min(match.rounds.length, value + 1)); }} aria-label="Next round">▶</button>
-          <button onClick={() => { setPlaying(false); setCursor(match.rounds.length); }} aria-label="Skip to end">↦</button>
+          <button onClick={() => { setPlaying(false); setCursor((value) => Math.min(match.rounds.length, value + 1)); }} aria-label="Next round"><PixelIcon name="next" size={16} /></button>
+          <button onClick={() => { setPlaying(false); setCursor(match.rounds.length); }} aria-label="Skip to end"><PixelIcon name="last" size={16} /></button>
           <div className="speed-controls" aria-label="Replay speed">
             {speeds.map((value) => (
               <button
@@ -219,7 +220,7 @@ export default function BattlePage() {
           ["pavlov", "joss", "RECOVERY VS CHAOS"],
         ].map(([left, right, label]) => (
           <button key={label} onClick={() => { setStrategyAId(left); setStrategyBId(right); resetPlayback(); }}>
-            {label} →
+            {label} <PixelIcon name="arrowRight" size={10} />
           </button>
         ))}
       </div>
