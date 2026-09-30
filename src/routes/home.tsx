@@ -144,18 +144,22 @@ export default function Home() {
 
       <section className="machine-tease page-shell">
         <div>
-          <h2>LLMS JOIN THE ARENA LATER.</h2>
+          <h2>LLMS HAVE ENTERED THE ARENA.</h2>
           <p>
-            First, learn the classical strategies. Then GPT, Claude, Gemini,
-            DeepSeek, Kimi, and Qwen enter the same tournament.
+            You learned the classics. Now bring your own OpenRouter key and watch GPT, Claude, Gemini,
+            DeepSeek, Kimi or Qwen play the same repeated game, and see how nice, forgiving or
+            ruthless each one really is.
           </p>
+          <div className="hero__actions">
+            <PixelLink href="/lab/llm">OPEN THE LLM LAB</PixelLink>
+          </div>
         </div>
-        <div className="machine-slots" aria-label="Future machine challengers">
+        <div className="machine-slots" aria-label="Machine challengers">
           {["GPT", "CLD", "GMN", "DSK"].map((name) => (
-            <span key={name}>
-              <i>?</i>
+            <Link key={name} to="/lab/llm">
+              <i>AI</i>
               {name}
-            </span>
+            </Link>
           ))}
         </div>
       </section>

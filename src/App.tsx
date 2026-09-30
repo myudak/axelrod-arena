@@ -8,6 +8,7 @@ import CampaignPage from "@/routes/campaign";
 import EvolutionPage from "@/routes/evolution";
 import Home from "@/routes/home";
 import LabPage from "@/routes/lab";
+import LlmLabPage from "@/routes/lab-llm";
 import NotFound from "@/routes/not-found";
 import PlayPage from "@/routes/play";
 import ProfilePage from "@/routes/profile";
@@ -39,6 +40,7 @@ export function App() {
         <Route path="/evolution" element={<EvolutionPage />} />
         <Route path="/research" element={<ResearchPage />} />
         <Route path="/lab" element={<LabPage />} />
+        <Route path="/lab/llm" element={<LlmLabPage />} />
         <Route path="/profile" element={<ProfilePage />} />
         <Route path="*" element={<NotFound />} />
       </Routes>

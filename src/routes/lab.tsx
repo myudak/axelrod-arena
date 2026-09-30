@@ -3,7 +3,7 @@ import { Link, useSearchParams } from "react-router";
 import { MoveChip } from "@/components/move-history";
 import { PageMeta } from "@/components/page-meta";
 import { PixelIcon } from "@/components/pixel-icon";
-import { PixelButton, PixelPanel, ScreenTitle } from "@/components/retro";
+import { PixelBadge, PixelButton, PixelLink, PixelPanel, ScreenTitle } from "@/components/retro";
 import { StrategyAvatar } from "@/components/strategy-avatar";
 import {
   customStrategy,
@@ -245,6 +245,13 @@ export default function LabPage() {
               Quick forecast: 60-round round robin, 2 repetitions. Run the real{" "}
               <Link className="text-link" to="/tournament">TOURNAMENT</Link> for the full picture.
             </p>
+          </PixelPanel>
+
+          <PixelPanel className="lab-llm-teaser">
+            <PixelBadge tone="gold">NEW</PixelBadge>
+            <h2>PUT A LANGUAGE MODEL IN THE ARENA</h2>
+            <p>Bring your own OpenRouter key and watch GPT, Claude, Gemini, DeepSeek, Kimi or Qwen play the classics.</p>
+            <PixelLink href="/lab/llm">OPEN LLM LAB</PixelLink>
           </PixelPanel>
 
           <PixelPanel className="lab-saved">

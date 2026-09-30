@@ -13,7 +13,8 @@
     "typecheck": "tsc -b",
     "lint": "eslint .",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "llm-arena": "node --experimental-strip-types --no-warnings scripts/llm-arena.ts"
   },
   "dependencies": {
     "@blobatar/react": "^2.5.0",
