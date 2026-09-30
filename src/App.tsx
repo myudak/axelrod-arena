@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { Route, Routes, useLocation } from "react-router";
+import { MotionPreference } from "@/components/settings-controls";
 import { SiteHeader } from "@/components/site-header";
 import BattlePage from "@/routes/battle";
 import Home from "@/routes/home";
@@ -20,6 +21,7 @@ export function App() {
   return (
     <>
       <ScrollToTop />
+      <MotionPreference />
       <SiteHeader />
       <Routes>
         <Route path="/" element={<Home />} />

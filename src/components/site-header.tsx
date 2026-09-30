@@ -1,4 +1,5 @@
 import { Link, NavLink } from "react-router";
+import { MotionToggle, SoundToggle } from "@/components/settings-controls";
 
 const nav = [
   { href: "/play", label: "PLAY" },
@@ -32,9 +33,10 @@ export function SiteHeader() {
             </NavLink>
           ))}
         </nav>
-        <span className="header-status">
-          <i aria-hidden="true" /> CLASSIC MODE
-        </span>
+        <div className="header-tools">
+          <SoundToggle />
+          <MotionToggle />
+        </div>
       </div>
     </header>
   );
