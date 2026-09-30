@@ -6,7 +6,8 @@ import { PageMeta } from "@/components/page-meta";
 import { PixelIcon } from "@/components/pixel-icon";
 import { PixelButton, PixelPanel, ScreenTitle } from "@/components/retro";
 import { StrategyAvatar } from "@/components/strategy-avatar";
-import { getStrategy, isStrategyId, strategies } from "@/lib/game";
+import { getStrategy, isStrategyId } from "@/lib/game";
+import { useRoster } from "@/lib/customs";
 import { recordMatch } from "@/lib/progress";
 import { playCue } from "@/lib/sound";
 import { gradeFor } from "@/lib/use-human-match";
@@ -14,8 +15,9 @@ import { gradeFor } from "@/lib/use-human-match";
 export default function PlayPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const requested = searchParams.get("opponent");
-  const opponentId = isStrategyId(requested) ? requested : "tit-for-tat";
-  const opponent = getStrategy(opponentId);
+  const roster = useRoster();
+  const opponentId = isStrategyId(requested, roster) ? requested : "tit-for-tat";
+  const opponent = getStrategy(opponentId, roster);
   const [lastXp, setLastXp] = useState(0);
   const [matchNumber, setMatchNumber] = useState(0);
 
@@ -44,10 +46,10 @@ export default function PlayPage() {
         <PixelPanel className="opponent-picker">
           <div className="panel-heading">
             <span>SELECT OPPONENT</span>
-            <b>{strategies.length} READY</b>
+            <b>{roster.length} READY</b>
           </div>
           <div className="opponent-list">
-            {strategies.map((strategy) => (
+            {roster.map((strategy) => (
               <button
                 key={strategy.id}
                 className={strategy.id === opponentId ? "is-selected" : ""}

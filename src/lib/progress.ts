@@ -180,8 +180,8 @@ export function recordMatch(summary: MatchSummary, stageId?: string) {
   return { xp, grade, stars: stageResult?.stars ?? 0, met: stageResult?.met, newStars };
 }
 
-/** Records a battle-mode prediction session. */
-export function recordPredictions(made: number, correct: number) {
+/** Records predictions from battle predict mode; the Seer badge is judged per session. */
+export function recordPredictions(made: number, correct: number, session: { made: number; correct: number }) {
   progressStore.set((current) => ({
     ...current,
     stats: {
@@ -190,8 +190,8 @@ export function recordPredictions(made: number, correct: number) {
       predictionsCorrect: current.stats.predictionsCorrect + correct,
     },
   }));
-  grantXp(correct * 2);
-  if (made >= 20 && correct / made >= 0.8) unlock("seer");
+  grantXp(correct);
+  if (session.made >= 40 && session.correct / session.made >= 0.8) unlock("seer");
 }
 
 export function recordTournament({

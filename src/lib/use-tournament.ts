@@ -8,12 +8,13 @@ export function useTournamentRunner(initialOptions: TournamentOptions) {
   const workerRef = useRef<Worker | null>(null);
   const initialRef = useRef(initialOptions);
 
-  const start = useCallback((options: TournamentOptions) => {
+  const start = useCallback((options: TournamentOptions, onDone?: (result: TournamentResult) => void) => {
     workerRef.current?.terminate();
     workerRef.current = null;
     const finish = (next: TournamentResult) => {
       setResult(next);
       setRunning(false);
+      onDone?.(next);
       workerRef.current?.terminate();
       workerRef.current = null;
     };
@@ -31,9 +32,9 @@ export function useTournamentRunner(initialOptions: TournamentOptions) {
   }, []);
 
   const run = useCallback(
-    (options: TournamentOptions) => {
+    (options: TournamentOptions, onDone?: (result: TournamentResult) => void) => {
       setRunning(true);
-      start(options);
+      start(options, onDone);
     },
     [start],
   );

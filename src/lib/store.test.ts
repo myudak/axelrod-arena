@@ -46,3 +46,28 @@ describe("match stats", () => {
     expect(stats.humanCooperation).toBe(0.75);
   });
 });
+
+import { decodeCustom, encodeCustom } from "@/lib/customs";
+
+describe("custom strategy share codes", () => {
+  it("round-trips name, symbol and probabilities", () => {
+    const code = encodeCustom({
+      id: "custom-x",
+      name: "Grace ~ Grit",
+      symbol: "gg",
+      color: "custom",
+      spec: { p0: 1, pCC: 1, pCD: 0.33, pDC: 0.9, pDD: 0.1 },
+    });
+    const decoded = decodeCustom(code)!;
+    expect(decoded.name).toBe("Grace ~ Grit");
+    expect(decoded.symbol).toBe("GG");
+    expect(decoded.spec).toEqual({ p0: 1, pCC: 1, pCD: 0.33, pDC: 0.9, pDD: 0.1 });
+    expect(decoded.id).toMatch(/^custom-/);
+  });
+
+  it("rejects malformed codes and clamps probabilities", () => {
+    expect(decodeCustom("nope")).toBeNull();
+    expect(decodeCustom("a,b,1.2.3")).toBeNull();
+    expect(decodeCustom("a,b,500.-3.50.50.50")!.spec.p0).toBe(1);
+  });
+});

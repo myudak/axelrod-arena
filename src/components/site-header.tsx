@@ -8,6 +8,7 @@ const nav = [
   { href: "/battle", label: "BATTLE" },
   { href: "/tournament", label: "TOURNAMENT" },
   { href: "/strategies", label: "STRATEGIES" },
+  { href: "/lab", label: "LAB" },
 ];
 
 function LevelChip() {

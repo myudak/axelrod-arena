@@ -13,6 +13,6 @@ describe("App shell", () => {
     expect(screen.getByRole("heading", { level: 1 }).textContent).toMatch(/CAN COOPERATION/i);
     const nav = screen.getByRole("navigation", { name: "Main navigation" });
     const hrefs = [...nav.querySelectorAll("a")].map((link) => link.getAttribute("href"));
-    expect(hrefs).toEqual(["/play", "/campaign", "/battle", "/tournament", "/strategies"]);
+    expect(hrefs).toEqual(["/play", "/campaign", "/battle", "/tournament", "/strategies", "/lab"]);
   });
 });
